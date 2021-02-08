@@ -9,17 +9,16 @@
 # 
 
 # We will install dependencies and work with latest stable pytorch 1.6
+# 
+# !pip uninstall torch torchvision -y
+# 
+# !pip install torch==1.6.0+cu101 torchvision==0.7.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html
+# 
+# !pip install -U transformers
+# 
+# !pip install -U simpletransformers  
 
 # In[1]:
-
-
-# get_ipython().system(' pip uninstall torch torchvision -y')
-# get_ipython().system(' pip install torch==1.6.0+cu101 torchvision==0.7.0+cu101 -f https://download.pytorch.org/whl/torch_stable.html')
-# get_ipython().system('pip install -U transformers')
-# get_ipython().system('pip install -U simpletransformers  ')
-
-
-# In[2]:
 
 
 # This Python 3 environment comes with many helpful analytics libraries installed
@@ -37,8 +36,7 @@ import os
 # You can write up to 5GB to the current directory (/kaggle/working/) that gets preserved as output when you create a version using "Save & Run All" 
 # You can also write temporary files to /kaggle/temp/, but they won't be saved outside of the current session
 
-
-# In[3]:
+# In[2]:
 
 
 import os, psutil  
@@ -49,27 +47,24 @@ def cpu_stats():
     memory_use = py.memory_info()[0] / 2. ** 30
     return 'memory GB:' + str(np.round(memory_use, 2))
 
-
-# In[4]:
+# In[3]:
 
 
 cpu_stats()
 
-
-# In[5]:
+# In[4]:
 
 
 import json
 
-data_file = '../input/arxiv/arxiv-metadata-oai-snapshot.json'
+data_file = '../../arxiv_download/tools/arxiv-metadata-oai-snapshot.json'
 
 def get_metadata():
     with open(data_file, 'r') as f:
         for line in f:
             yield line
 
-
-# In[6]:
+# In[5]:
 
 
 metadata = get_metadata()
@@ -79,10 +74,9 @@ for paper in metadata:
 #     print(paper)
     break
 
-
 # **We will take last 5 years ArXiv papers (2016-2021) due to Kaggle'c compute limits**
 
-# In[7]:
+# In[6]:
 
 
 titles = []
@@ -94,7 +88,7 @@ for paper in metadata:
     ref = paper_dict.get('journal-ref')
     try:
         year = int(ref[-4:]) 
-        if 2016 < year < 2021:
+        if 2010 < year < 2021:
             years.append(year)
             titles.append(paper_dict.get('title'))
             abstracts.append(paper_dict.get('abstract'))
@@ -103,8 +97,7 @@ for paper in metadata:
 
 len(titles), len(abstracts), len(years)
 
-
-# In[8]:
+# In[7]:
 
 
 papers = pd.DataFrame({
@@ -114,22 +107,19 @@ papers = pd.DataFrame({
 })
 papers.head()
 
-
-# In[9]:
+# In[8]:
 
 
 del titles, abstracts, years
 
-
-# In[10]:
+# In[9]:
 
 
 cpu_stats()
 
-
 #  **We will use `simpletransformers` library to train a T5 model**
 
-# In[11]:
+# In[10]:
 
 
 import logging
@@ -147,30 +137,27 @@ transformers_logger.setLevel(logging.WARNING)
 #     
 #  You can read about the data format:  https://github.com/ThilinaRajapakse/simpletransformers#t5-transformer
 
-# In[12]:
+# In[11]:
 
 
 papers = papers[['title','abstract']]
 papers.columns = ['target_text', 'input_text']
 papers = papers.dropna()
 
-
-# In[13]:
+# In[12]:
 
 
 eval_df = papers.sample(frac=0.2, random_state=101)
 train_df = papers.drop(eval_df.index)
 
-
-# In[14]:
+# In[13]:
 
 
 train_df.shape, eval_df.shape
 
-
 # **We will training out T5 model with very bare minimum `num_train_epochs=4`, `train_batch_size=16` to  fit into Kaggle's compute limits**
 
-# In[15]:
+# In[14]:
 
 
 import logging
@@ -195,7 +182,7 @@ model_args = {
 }
 
 # Create T5 Model
-model = T5Model("t5-small", args=model_args, use_cuda=True)
+model = T5Model("t5", "t5-small", args=model_args, use_cuda=True)
 
 # Train T5 Model on new task
 model.train_model(train_df)
@@ -206,51 +193,48 @@ results = model.eval_model(eval_df)
 # Predict with trained T5 model
 #print(model.predict(["convert: four"]))
 
-
-# In[16]:
+# In[15]:
 
 
 results
 
-
 # ## And We're Done ! 
 # **Let's see how our model performs in generating paper's titles**
 
-# In[18]:
+# In[16]:
 
 
-random_num = 350
-actual_title = eval_df.iloc[random_num]['target_text']
-actual_abstract = ["summarize: "+eval_df.iloc[random_num]['input_text']]
-predicted_title = model.predict(actual_abstract)
+import random
 
-print(f'Actual Title: {actual_title}')
-print(f'Predicted Title: {predicted_title}')
-print(f'Actual Abstract: {actual_abstract}')
+document = []
+
+for _ in range(250):
+    data = dict()
+
+    random_idx = random.randint(0, len(eval_df)-1)
+    
+    actual_abstract = eval_df.iloc[random_idx]['input_text']
+    actual_title = eval_df.iloc[random_idx]['target_text']
+
+    # Predict with trained T5 model
+    predicted_title = model.predict(["summarize: " + actual_abstract])[0]
+
+    print(f'Actual Title: {actual_title}')
+    print(f'Predicted Title: {predicted_title}')
+    print(f'Actual Abstract: {actual_abstract}')
+
+    data['true_title'] = actual_title
+    data['pred_title'] = predicted_title
+    data['abstract'] = actual_abstract
+
+    document.append(data)
+
+import json
+with open('result.json', 'w') as f:
+    json.dump(document, f)
 
 
-# In[20]:
+# In[ ]:
 
 
-random_num = 478
-actual_title = eval_df.iloc[random_num]['target_text']
-actual_abstract = ["summarize: "+eval_df.iloc[random_num]['input_text']]
-predicted_title = model.predict(actual_abstract)
-
-print(f'Actual Title: {actual_title}')
-print(f'Predicted Title: {predicted_title}')
-print(f'Actual Abstract: {actual_abstract}')
-
-
-# In[22]:
-
-
-random_num = 999
-actual_title = eval_df.iloc[random_num]['target_text']
-actual_abstract = ["summarize: "+eval_df.iloc[random_num]['input_text']]
-predicted_title = model.predict(actual_abstract)
-
-print(f'Actual Title: {actual_title}')
-print(f'Predicted Title: {predicted_title}')
-print(f'Actual Abstract: {actual_abstract}')
 
