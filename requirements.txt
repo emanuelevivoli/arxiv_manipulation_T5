@@ -1,0 +1,21 @@
+# conda create new arxiv_abs2title_T5
+# pip install -r requirements.txt
+
+# base ----------------------------------------
+Cython
+numpy
+cuda
+torch 
+
+# model
+simpletransformers
+tensorboard
+
+# plotting ------------------------------------
+pandas
+
+# logging -------------------------------------
+
+# export --------------------------------------
+
+# extras --------------------------------------
